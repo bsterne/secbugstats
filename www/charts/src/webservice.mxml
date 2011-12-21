@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute"
+xmlns="*" creationComplete="getData()">
+<mx:Script>
+	<![CDATA[
+	private function getData():void {
+		dataRequestor.send();
+	}
+	]]>
+</mx:Script>
+<mx:DataGrid id="dgUserRequest" x="22" y="128" dataProvider="{dataRequestor.lastResult.details.detail}">
+        <mx:columns>
+            <mx:DataGridColumn headerText="User ID" dataField="did"/>
+            <mx:DataGridColumn headerText="User Name" dataField="product"/>
+        </mx:columns>
+    </mx:DataGrid>
+    <mx:HTTPService id="dataRequestor" url="http://localhost/secbugstats/ws-details-snapshot.php" useProxy="false" method="POST">
+        <mx:request xmlns="">
+            <category>sg_critical</category>
+        </mx:request>
+    </mx:HTTPService>
+</mx:Application>

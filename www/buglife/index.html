@@ -1,0 +1,355 @@
+<html>
+<head>
+<title>Mozilla Security Bug Lifespans</title>
+<script language="javascript" type="text/javascript" src="script/jquery-1.4.min.js"></script>
+<script language="javascript" type="text/javascript" src="script/flot/jquery.flot.js"></script>
+<script language="javascript" type="text/javascript" src="script/flot/jquery.flot.crosshair.js"></script>
+<script language="javascript" type="text/javascript" src="script/flot/jquery.flot.selection.js"></script>
+<style>
+body { padding-bottom: 6em; }
+#data { display: none }
+.stattext { margin: 1em; }
+</style>
+</head>
+    <body>
+    <h1>Mozilla Security Bug Lifespans</h1>
+    <div id="charts">
+      
+    </div>
+
+    <textarea id="data" style="width:800;height:400"></textarea>
+
+<script id="source" language="javascript" type="text/javascript">
+var stats = {};    // data points
+var groups = {};   // put data points into buckets
+
+var sets = {};   // lists of open bugs (by severty) to plot
+var fixed = {};  // lists of bugs fixed (by severity) to plot
+var opened = {}; // lists of bugs opened (by severity) to plot
+// keep track of the most recent timestamp we've seen and use that as "current"
+var curdate = 0;
+
+// list of bug sets (by severity) to plot
+var bugsets = {};
+
+var teamLabel = { "Layout": "Layout", "JS": "JavaScript", "Content": "Content",
+                  "GFX": "GFX", "Fx": "Frontend", "Necko": "Networking",
+                  "Mail": "Mail", "Other": "Other" };
+
+// log extra stuff
+var DEBUG = true;
+
+// don't show hovertext when a selection is being made
+var pauseHovertext;
+
+function debug(s) {
+  $("#data").prepend("\n\n"+s);
+}
+
+function pad(num, len) {
+  s = "" + num;
+  while (s.length < len)
+    s = "0" + s;
+  return s;
+}
+
+function avg(a) {
+  var r = { mean: 0, variance: 0, deviation: 0 };
+  var t = a.length;
+  for (var m, s = 0, l = t; l--; s += a[l]);
+  for (m = r.mean = s / t, l = t, s = 0; l--; s += Math.pow(a[l] - m, 2));
+  return r.deviation = Math.sqrt(r.variance = s / t), r;
+}
+
+function getData() {
+  var xhr = new XMLHttpRequest();
+  xhr.open("get", "stats.txt");
+  xhr.onreadystatechange = function(e) {
+    // status == 0 for file: loading
+    if (xhr.readyState == 4 && (xhr.status == 0 || xhr.status == 200)) {
+      stats = eval( "(" + xhr.responseText + ")" );
+
+      // graph each of the severities
+      for (sev in stats) {
+
+        // have we seen this severity yet?
+        if (!(sev in bugsets)) {
+          bugsets[sev] = [];
+          groups[sev] = [];
+        }
+
+        // process each severity group
+        var sevGroup = stats[sev];
+        //if (DEBUG) debug(sevGroup.toSource());
+        for (var i = 0 ; i < sevGroup.length ; i++) {
+          
+          var opendate = sevGroup[i].opendate*1000;
+          var closedate = sevGroup[i].closedate*1000;
+          // keep track of the most recent timestamp for closedates, and that
+          // value will be used to determine which bugs are still open
+          if (closedate > curdate)
+            curdate = closedate;
+
+          var o = new Date(opendate);
+          var c = new Date(closedate);
+          // convert ms to days
+          var lifespan = Math.round((c-o)/(60*60*24*1000));
+
+          //sets[sev][team].push([date, sevGroup[i].count]);
+          //if (DEBUG) debug(sevGroup[i].toSource());
+          var bug = {};
+          //if (DEBUG) debug("examining: "+sevGroup[i].toSource());
+          bug.points = [opendate, closedate];
+          bug.bugid = sevGroup[i].bugid
+          bug.summary = sevGroup[i].summary;
+          bug.lifespan = lifespan;
+          bugsets[sev].push(bug);
+          // keep track of the lifetimes so we can sort then separate
+          // into buckets, e.g. slowest 10%, middle 40%, etc.
+          groups[sev].push(parseInt(lifespan));
+        } // matches for (var i = 0 ; i < sevGroup.length ; i++)
+        // sort the lifespans for this severity
+        groups[sev].sort(function cmp(a, b) {
+          if (a > b) return 1;
+          else if (a < b) return -1;
+          else return 0;
+        });
+        plotSeries(sev, bugsets[sev]);
+      } // for (sev in stats)
+    }
+  };
+  xhr.send(null);
+}
+
+function showTooltip(x, y, s) {
+  $('<div id="tooltip">' + s + '</div>').css( {
+    position: 'absolute',
+    display: 'none',
+    top: y + 10,
+    left: x + 10,
+    border: '1px solid #fdd',
+    padding: '2px',
+    'background-color': '#fee',
+    opacity: 0.90
+  }).appendTo("body").fadeIn("fast");
+}
+
+var canvas;
+function plotSeries(severity, data) {
+  // each graph gets a canvas and some text around it
+  //if (DEBUG) debug("severity: "+severity+", data: "+data.toSource());
+  var pane = document.createElement("div");
+  pane.innerHTML = "<h2>Bug Lifespan - "+severity+"</h2>";
+  // placeholder for printing stats
+  var statbox = document.createElement("div");
+  //statbox.id = severity + "_stats";
+  var summary = "<table><tr><td><b>Mean:</b> " + 
+    Math.round(avg(groups[severity]).mean*10)/10 + " days <small>(" + data.length +
+    " bugs)</small></td></tr><tr><td style=\"font-size:80%;padding:.5em 0 0 0;color:#888\">Hover on bugs to show details.  Click to open in Bugzilla.  Drag a box to zoom selection.  Click grid to zoom out.</td></tr></table>"
+  $(statbox).addClass("stattext").html(summary);
+  $(pane).append(statbox);
+  var canvas = document.createElement("div");
+  // 3px canvas height per bug
+  var h = data.length * 3;
+  $(canvas).css("width", "800px");
+  $(canvas).css("height", h+"px");
+  $(canvas).attr("id", severity);
+  $(pane).append(canvas);
+
+  $("#charts").append(pane);
+
+  // set up bugs to plot vertically up the chart
+  // data: [{data:[1215119580000, 1216580400000], bugid:1234},
+  //        {data:[1215533220000, 1218561960000], bugid:5432}]
+  var bugs = [];
+  // display heatmapped coloring for lifespan buckets
+  var legend = { "b0": false, "b1": false, "b2": false, "b3": false, "b4": false };
+
+  for (var i = 0 ; i < data.length ; i++) {
+    var bug = {};
+    bug.data = [[data[i].points[0], i], [data[i].points[1], i]];
+    bug.bugid = data[i].bugid;
+    // apply "heatmapping" color to series
+    var lifetime = parseFloat(data[i].lifespan);
+    // generate bucket boundaries
+    // "Fastest 10%"
+    var b0 = groups[severity][Math.floor(groups[severity].length * .1)];
+    // "Second 20%"
+    var b1 = groups[severity][Math.floor(groups[severity].length * .3)];
+    // "Middle 40%"
+    var b2 = groups[severity][Math.floor(groups[severity].length * .7)];
+    // "Second-slowest 20%"
+    var b3 = groups[severity][Math.floor(groups[severity].length * .9)];
+
+    if (lifetime < b0) {
+      bug.color = "#38B549";
+      // populate the legend with a *single* instance of this bucket type
+      if (!legend["b0"]) {
+        bug.label = "Shortest 10%";
+        legend["b0"] = true;
+      }
+    }
+    else if (lifetime < b1) {
+      bug.color = "#126D44";
+      if (!legend["b1"]) {
+        bug.label = "10-30%";
+        legend["b1"] = true;
+      }
+    }
+    else if (lifetime < b2) {
+      bug.color = "#061C3A";
+      if (!legend["b2"]) {
+        bug.label = "30-70%";
+        legend["b2"] = true;
+      }
+    }
+    else if (lifetime < b3) {
+      bug.color = "#821B2D";
+      if (!legend["b3"]) {
+        bug.label = "70-90%";
+        legend["b3"] = true;
+      }
+    }
+    // "Slowest 10%"
+    else {
+      bug.color = "#ED1C24";
+      if (!legend["b4"]) {
+        bug.label = "Longest 10%";
+        legend["b4"] = true;
+      }
+    }
+
+    bugs.push(bug);
+  }
+
+  var options = {
+    series: {
+      lines: { show: true },
+      points: { show: false },
+    },
+    xaxis: { mode: "time" },
+    yaxis: { min: 0 },
+    selection: { mode: "xy" },
+    crosshair: { mode: "x" },
+    grid: {
+      hoverable: true,
+      autoHighlight: true,
+      clickable: true
+    },
+    legend: { position: "nw" }
+  };
+
+  // scale down for really tall chart
+  if (data.length > 200) {
+    // only 2px canvas height per bug
+    var h = data.length * 2;
+    $(canvas).css("height", h+"px");
+    // 1px line width
+    options.series.lines.lineWidth = 1;
+  }
+
+  // set up zoom-to-selection
+  $("#"+severity).bind("plotselected",  function (event, ranges) {
+    //if (DEBUG) debug(ranges.toSource());
+    plot = $.plot($("#"+severity), bugs,
+                  $.extend(true, {}, options, {
+                    xaxis: { min: ranges.xaxis.from,
+                             max: ranges.xaxis.to
+                           },
+                    yaxis: { min: ranges.yaxis.from,
+                             max: ranges.yaxis.to
+                           }
+
+                  }));
+  });
+
+  var plot = $.plot($("#"+severity), bugs, options);
+
+  prevPoint = null;
+
+  
+  $("#"+severity).bind("plothover",  function (event, pos, item) {
+    if (pauseHovertext)
+      return;
+
+    if (item) {
+      // show tooltip
+      if (prevPoint != item.datapoint) {
+        prevPoint = item.datapoint;
+
+        $("#tooltip").remove();
+        try {
+          var bugid = item.series.bugid;
+        }
+        catch (e) { var bugid = "?"; }
+        try {
+          var o = new Date(item.series.data[0][0]);
+          var opendate = o.toString().substring(4,15);
+          var c = new Date(item.series.data[1][0]);
+          var closedate = c.toString().substring(4,15);
+          // convert ms to days
+          var lifespan = Math.round((c-o)/(60*60*24*1000));
+          var summary = stats[severity][item.seriesIndex].summary;
+        }
+        catch (e) { var opendate = e ; var closedate = e; var lifespan = e;
+                    var summary = e; }
+        //var hovertext = "<small>"+date+"</small>"+"<br>bug: <b>"+bugid+"</b>";
+        var hovertext = "<b>bug " + bugid + "</b><br>" + summary + "<br><small>opened: " + opendate +
+                        "<br>closed: ";
+        // don't show a closedate if the bug is still open
+        //if (DEBUG) debug("closedate: "+item.series.data[1][0]+", curdate: "+curdate);
+        var closedisplay = closedate;
+        if (item.series.data[1][0] == curdate) {
+          closedisplay = "-";
+          lifespan += "+";
+        }
+        hovertext += closedisplay + "<br>days open: " + lifespan + "</small>";
+        showTooltip(item.pageX, item.pageY, hovertext);
+      }
+    }
+    else {
+      $("#tooltip").remove();
+      prevPoint = null;
+    }
+  }); // matches $("#"+severity).bind("plothover")
+
+  $("#"+severity).bind("plotclick",  function (event, pos, item) {
+    if (!item) {
+      var first = stats[severity][0];
+      plot = $.plot($("#"+severity), bugs,
+                  $.extend(true, {}, options, {
+                    xaxis: { min: first.opendate*1000,
+                             max: curdate
+                           },
+                    yaxis: { min: 0,
+                             max: stats[severity].length
+                           }
+                  }));
+    }
+    // open bug in bugzilla
+    else {
+      try {
+        var bugid = item.series.bugid;
+        window.open("https://bugzilla.mozilla.org/show_bug.cgi?id="+bugid);
+      }
+      catch (e) { }
+    }
+  });
+
+  // turn off hovertext while selection is being made
+  $("#"+severity).mousedown(function() {
+    pauseHovertext = true;
+  });
+  $("#"+severity).mouseup(function() {
+    pauseHovertext = false;
+  });
+}
+
+$(document).ready(function () {
+  getData();
+});
+
+</script>
+
+</body>
+</html>

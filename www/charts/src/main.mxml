@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[	
+			import mx.charts.events.ChartItemEvent;
+			import mx.charts.HitData;
+			import mx.controls.Alert;
+			import flash.net.LocalConnection;
+			private var conn:LocalConnection;
+			private function initConn():void {
+				conn = new LocalConnection();
+			}
+			private var paused:Boolean = false;
+			private function init():void {
+				ExternalInterface.addCallback("doPausePreview", pausePreview);
+				ExternalInterface.addCallback("doUnpausePreview", unpausePreview);
+				chart.addEventListener(KeyboardEvent.KEY_DOWN, processKeyDown);
+				chart.addEventListener(KeyboardEvent.KEY_UP, processKeyUp);
+				initConn();
+				getData();
+			}
+			private function processKeyDown(event:KeyboardEvent):void {
+				if(event.keyCode == Keyboard.SHIFT)
+					paused = true;
+			}
+			private function processKeyUp(event:KeyboardEvent):void {
+				if(event.keyCode == Keyboard.SHIFT)
+					paused = false;
+			}
+			private function getData():void {
+				dataRequestor.send();
+			}
+			public function showTooltip(hd:HitData):String {
+				var cat:String;
+				cat = LineSeries(hd.element).yField;
+				var s:String;
+				s = "<b>" + LineSeries(hd.element).displayName + "</b><br/>";
+				s += hd.item[cat] + "<br/>";
+				s += hd.item.date;
+				if ((hd.item.details) && (hd.item[cat] > 0))
+					s += "<br/>[click for details]";
+				if (!paused) {
+					try {
+						conn.send("myConn", "localMsgHandler", cat+"&"+hd.item.date);
+					}
+					catch (error:ArgumentError) {
+						trace("Can't connect with preview window!");
+					}
+				}
+				return s;
+			}
+			private function showDetails(e:ChartItemEvent):void {
+				var hd:HitData;
+				var cat:String;
+				var date:String;
+				hd = e.hitData;
+				cat = LineSeries(hd.element).yField
+				//Alert.show(cat+"\n"+hd.item[cat]+"\n"+hd.item.date);
+				var myDate:String;
+				var dateParts:Array;
+				if ((hd.item.details) && (hd.item[cat] > 0)) {
+					dateParts = hd.item.date.split("/");
+					myDate = dateParts[2]+"-"+dateParts[0]+"-"+dateParts[1];
+					var url:URLRequest = new URLRequest("category.php?cat="+cat+"&date="+myDate);
+					navigateToURL(url, "_self")
+				}
+			}
+			public function pausePreview():void {
+				paused = true;
+			}
+			public function unpausePreview():void {
+				paused = false;
+			}
+		]]>
+	</mx:Script>
+	
+	<mx:HTTPService id="dataRequestor" url="/secbugstats/ws-bug-count.php" useProxy="false" method="POST">
+		<mx:request xmlns="">
+		</mx:request>
+	</mx:HTTPService>
+	 
+  <!-- Define custom colors for use as fills. -->
+  <mx:Stroke id="sc1" color="0x990000" weight="2" />
+  <mx:Stroke id="sc2" color="0xBA6427" weight="2"/>
+  <mx:Stroke id="sc3" color="0xD1940C" weight="2"/>
+  <mx:Stroke id="sc4" color="0x267726" weight="2"/>
+  <mx:Stroke id="sc5" color="0xBAB5AB" weight="2"/>
+  <mx:Stroke id="sc6" color="0x565248" weight="2"/>
+  <mx:Stroke id="sc7" color="0x83A67F" weight="2"/>
+  <mx:Stroke id="sc8" color="0x445632" weight="2"/>
+  <mx:Stroke id="sc9" color="0x663822" weight="2"/>
+  <mx:Stroke id="sc10" color="0x887FA3" weight="2"/>
+  <mx:Stroke id="sc11" color="0x494066" weight="2"/>
+  <mx:Stroke id="sc12" color="0x7590AE" weight="2"/>
+  <mx:Stroke id="sc13" color="0x314E6C" weight="2"/>
+  <mx:Stroke id="sc14" color="0xE0C39E" weight="2"/>
+  <mx:Stroke id="sc15" color="0x826647" weight="2"/>
+  <mx:Stroke id="sc16" color="0x000000" weight="2"/>
+    
+	<mx:Panel id="panel" title="Mozilla Security Bugs - By Severity" height="100%" width="100%">
+		<mx:LineChart id="chart" 
+			height="100%"
+			width="100%"
+			showDataTips="true"
+			dataTipFunction="showTooltip"
+			itemClick="showDetails(event)"
+			dataProvider="{dataRequestor.lastResult.stats.stat}">
+			<mx:horizontalAxis>
+				<mx:DateTimeAxis dataUnits="days" dataInterval="1" />
+			</mx:horizontalAxis>
+			
+			<mx:series>
+				<mx:LineSeries yField="sg_critical" xField="date" form="segment" displayName="sg:critical" lineStroke="{sc1}" interpolateValues="true" />
+				<mx:LineSeries yField="sg_high" xField="date" form="segment" displayName="sg:high" lineStroke="{sc2}" interpolateValues="true" />
+				<mx:LineSeries yField="sg_moderate" xField="date" form="segment" displayName="sg:moderate" lineStroke="{sc3}" interpolateValues="true" />
+				<mx:LineSeries yField="sg_low" xField="date" form="segment" displayName="sg:low" lineStroke="{sc4}" interpolateValues="true" />
+			</mx:series>
+		</mx:LineChart>
+		<mx:Legend dataProvider="{chart}" direction="horizontal" />
+	</mx:Panel>
+</mx:Application>

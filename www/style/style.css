@@ -1,0 +1,87 @@
+body {
+  background-color: #8ea3ac;
+  color: #06272e;
+}
+table {
+  border:1px solid #06272e;
+  background-color: #fff;
+}
+tr.topRow {
+  background-color: #8ea3ac;
+  color:#fff;
+  font-weight:600;
+  text-align:center;
+}
+.center {
+  text-align:center;
+}
+#wrap {
+  width: 100%;
+}
+#bugCount {
+  float: left;
+  width: 100%;
+}
+#bugCountQueries {
+  float: left;
+  width: 20%;
+}
+#bugCountChart {
+  float: left;
+  margin-left: 1em;
+  width: 35%;
+  height: 500px;
+}
+#stackedBugCount {
+  float: left;
+  margin-left: 1em;
+  width: 35%;
+  height: 500px;
+}
+#bugPieChart, #bugCountWeighted {
+  float: left;
+  width: 100%;
+  height: 700px;
+}
+#bugDist {
+  clear: both;
+  float: left;
+  width: 100%;
+}
+#bugDistCur {
+  float: left;
+  width: 45%;
+}
+#bugDistLast {
+  float: left;
+  width: 45%;
+  margin-left: 1em;
+}
+#secResponse {
+  clear: both;
+  float: left;
+  width: 100%;
+}
+#secOpenClose {
+  float: left;
+  margin-left: 1em;
+  width: 35%;
+  height: 500px;
+}
+#secActivity {
+  float: left;
+  margin-left: 1em;
+  width: 35%;
+  height: 500px;
+
+}
+#secResponseQueries {
+  float: left;
+  width: 20%;
+}
+#secResponseChart {
+  float: left;
+  margin-left: 1em;
+  width: 70%;
+  height: 500px;
+}

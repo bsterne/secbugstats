@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[	
+			import mx.charts.events.ChartItemEvent;
+			import mx.charts.HitData;
+			import mx.controls.Alert;
+			[Bindable]
+			public var myCriticalWeight:Number;
+			[Bindable]
+			public var myHighWeight:Number;
+			[Bindable]
+			public var myModerateWeight:Number;
+			[Bindable]
+			public var myLowWeight:Number;
+			private function init():void {
+				myCriticalWeight = Application.application.parameters.critical;
+				if (isNaN(myCriticalWeight))
+					myCriticalWeight = 1;
+				myHighWeight = Application.application.parameters.high;
+				if (isNaN(myHighWeight))
+					myHighWeight = 1;
+				myModerateWeight = Application.application.parameters.moderate;
+				if (isNaN(myModerateWeight))
+					myModerateWeight = 1;
+				myLowWeight = Application.application.parameters.low;
+				if (isNaN(myLowWeight))
+					myLowWeight = 1;
+				getData();
+			}
+			private function getData():void {
+				dataRequestor.send();
+			}
+			public function showTooltip(hd:HitData):String {
+				var cat:String;
+				cat = AreaSeries(hd.element).yField;
+				var s:String;
+				var allCats:Array = ["sg_critical","sg_high","sg_moderate","sg_low"];
+				var total:Number = 0;
+				s = "<b>" + AreaSeries(hd.element).displayName + "</b><br/>";
+				s += hd.item.date + "<br/>";
+				s += hd.item[cat];
+				for (var i:String in allCats){
+					if (!isNaN(parseInt(hd.item[allCats[i]])))
+						total += parseInt(hd.item[allCats[i]]);
+				}
+				s += " (" + ((100*parseInt(hd.item[cat]))/total).toFixed(1) + "%)<br/>";
+				s += "<em>Total: " + total + "</em>";
+				return s;
+			}
+		]]>
+	</mx:Script>
+	
+	<mx:HTTPService id="dataRequestor" url="/secbugstats/ws-bug-count-weighted.php" useProxy="false" method="POST">
+		<mx:request xmlns="">
+			<critical_weight>{myCriticalWeight}</critical_weight>
+			<high_weight>{myHighWeight}</high_weight>
+			<moderate_weight>{myModerateWeight}</moderate_weight>
+			<low_weight>{myLowWeight}</low_weight>
+		</mx:request>
+	</mx:HTTPService>
+	 
+  <!-- Define custom colors for use as fills. -->
+  <mx:SolidColor id="sc1" color="0x990000" />
+  <mx:SolidColor id="sc2" color="0xBA6427" />
+  <mx:SolidColor id="sc3" color="0xD1940C" />
+  <mx:SolidColor id="sc4" color="0x267726" />
+  <mx:Stroke id="st1" weight="1" color="0x000000" alpha=".5"/>
+    
+	<mx:Panel id="panel" title="Mozilla Security Bugs - Weighted Totals" height="100%" width="100%">
+		<mx:AreaChart id="chart" 
+			height="100%"
+			width="100%"
+			showDataTips="true"
+			dataTipFunction="showTooltip"
+			dataProvider="{dataRequestor.lastResult.stats.stat}"
+			type="stacked">
+			<mx:horizontalAxis>
+				<mx:DateTimeAxis dataUnits="days" dataInterval="1"/>
+			</mx:horizontalAxis>
+			
+			<mx:series>
+				<mx:AreaSeries yField="sg_critical" xField="date" displayName="sg:critical" areaStroke="{st1}" areaFill="{sc1}" />
+				<mx:AreaSeries yField="sg_high" xField="date" displayName="sg:high" areaStroke="{st1}" areaFill="{sc2}" />
+				<mx:AreaSeries yField="sg_moderate" xField="date" displayName="sg:moderate" areaStroke="{st1}" areaFill="{sc3}" />
+				<mx:AreaSeries yField="sg_low" xField="date" displayName="sg:low" areaStroke="{st1}" areaFill="{sc4}" />
+			</mx:series>
+		</mx:AreaChart>
+		<mx:Legend dataProvider="{chart}" direction="horizontal" />
+	</mx:Panel>
+</mx:Application>

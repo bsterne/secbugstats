@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[
+			import mx.charts.series.items.LineSeriesItem;
+			import mx.charts.HitData;
+			import mx.charts.events.ChartItemEvent;
+			import mx.controls.Alert;
+
+			private function init():void {
+				getData();
+			}
+			private function getData():void {
+				dataRequestor.send();
+			}
+			public function dtFunc(hd:HitData):String {
+				var cat:String;
+				cat = LineSeries(hd.element).yField;
+				var s:String;
+				s = "<b>" + LineSeries(hd.element).displayName + "</b><br/>";
+				s += hd.item[cat] + "<br/>";
+				s += hd.item.date;
+				s += "<br/>[click for bug list]";
+				return s;
+			}
+			private function showBugs(e:ChartItemEvent):void {
+				var hd:HitData;
+				var cat:String;
+				var date:String;
+				hd = e.hitData;
+				var lSI:LineSeriesItem = hd.chartItem as LineSeriesItem;
+				cat = LineSeries(hd.element).yField
+				var url:URLRequest = new URLRequest("https://bugzilla.mozilla.org/buglist.cgi?bug_id="+lSI.item[cat].@bug_list);
+				navigateToURL(url, "_blank")
+			}
+		]]>
+	</mx:Script>
+	
+	<mx:HTTPService 
+		id="dataRequestor" 
+		url="/secbugstats/ws-sec-triage.php" 
+		useProxy="false" 
+		method="POST" resultFormat="e4x">
+		<mx:request xmlns="">
+		</mx:request>
+	</mx:HTTPService>
+ 
+  <!-- Define custom colors for use as fills. -->
+  <mx:Stroke id="sc1" color="0xEC4832" weight="2" />
+  <mx:Stroke id="sc2" color="0x400058" weight="2"/>
+  <mx:Stroke id="sc3" color="0xF5ED93" weight="2"/>
+    
+	<mx:Panel title="Mozilla Security Bugs - Triage" height="100%" width="100%">
+		<mx:LineChart id="chart" 
+			height="100%"
+			width="100%"
+			showDataTips="true"
+			dataTipFunction="dtFunc"
+			itemClick="showBugs(event)"
+			dataProvider="{dataRequestor.lastResult.stat}">
+			<mx:horizontalAxis>
+				<mx:DateTimeAxis dataUnits="days" dataInterval="1" />
+			</mx:horizontalAxis>
+			
+			<mx:series>
+				<mx:LineSeries yField="sg_needstriage" xField="date" form="segment" displayName="Needs Triage" lineStroke="{sc1}" interpolateValues="true" />
+				<mx:LineSeries yField="sg_unconfirmed" xField="date" form="segment" displayName="Unconfirmed" lineStroke="{sc2}" interpolateValues="true" />
+				<mx:LineSeries yField="sg_untouched" xField="date" form="segment" displayName="Stale (14 days)" lineStroke="{sc3}" interpolateValues="true" />
+			</mx:series>
+		</mx:LineChart>
+		<mx:Legend dataProvider="{chart}" direction="horizontal"/>
+	</mx:Panel>
+</mx:Application>
