@@ -1,0 +1,242 @@
+<html>
+<head>
+<title>Mozilla Engineering Team Statistics</title>
+<script language="javascript" type="text/javascript"
+        src="/secbugstats/script/jquery-1.4.min.js"></script>
+<script language="javascript" type="text/javascript"
+        src="/secbugstats/script/flot/jquery.flot.js"></script>
+<script language="javascript" type="text/javascript"
+        src="/secbugstats/script/flot/jquery.flot.crosshair.js"></script>
+<style>
+#graphs { }
+.pane { float: left; margin: 1em; }
+#data { display: none }
+</style>
+</head>
+    <body>
+    <h1>Mozilla Engineering Team Statistics</h1>
+    <div id="graphs">
+    </div>
+
+    <textarea id="data" style="width:800;height:400"></textarea>
+
+<script id="source" language="javascript" type="text/javascript">
+var stats = {};
+var sets = {};   // lists of open bugs (by severty) to plot
+var fixed = {};  // lists of bugs fixed (by severity) to plot
+var opened = {}; // lists of bugs opened (by severity) to plot
+var teamLabel = { "Layout": "Layout", "JS": "JavaScript", "DOM": "DOM",
+                  "GFX": "GFX", "Fx": "Frontend", "Necko": "Networking",
+                  "Mail": "Mail", "Arch": "Architecture", "Crypto": "Crypto",
+                  "Serv": "Services", "Mobile": "Mobile" };
+
+function debug(s) {
+  $("#data").prepend("\n\n"+s);
+}
+
+function pad(num, len) {
+  s = "" + num;
+  while (s.length < len)
+    s = "0" + s;
+  return s;
+}
+
+function getData() {
+  var xhr = new XMLHttpRequest();
+  xhr.open("get", "stats.txt");
+  xhr.onreadystatechange = function(e) {
+    if (xhr.readyState == 4 && xhr.status == 200) {
+      stats = eval( "(" + xhr.responseText + ")" );
+
+      // graph each of the severities
+      for (sev in stats) {
+        // have we seen this severity yet?
+        if (!(sev in sets))
+          sets[sev] = {};
+        if (!(sev in fixed))
+          fixed[sev] = {};
+        if (!(sev in opened))
+          opened[sev] = {};
+
+        // separate the severity group into teams to plot
+        var sevGroup = stats[sev];
+        for (var i = 0 ; i < sevGroup.length ; i++) {
+
+          var team = sevGroup[i].team;
+          // create a new series if we haven't seen this team yet
+          if (!(team in sets[sev]))
+            sets[sev][team] = [];
+          if (!(team in fixed[sev]))
+            fixed[sev][team] = {};
+          if (!(team in opened[sev]))
+            opened[sev][team] = {};
+
+          var date = sevGroup[i].timestamp*1000;
+          sets[sev][team].push([date, sevGroup[i].count]);
+          fixed[sev][team][date] = sevGroup[i].cleared;
+          //debug("fixed["+sev+"]["+date+"]: "+sevGroup[i].cleared);
+          opened[sev][team][date] = sevGroup[i].new;
+        }
+
+        plotSeries(sev, sets[sev]);
+
+      } // for (sev in stats)
+    }
+  };
+  xhr.send(null);
+}
+
+function showTooltip(x, y, s) {
+  $('<div id="tooltip">' + s + '</div>').css( {
+    position: 'absolute',
+    display: 'none',
+    top: y + 10,
+    left: x + 10,
+    border: '1px solid #fdd',
+    padding: '2px',
+    'background-color': '#fee',
+    opacity: 0.80
+  }).appendTo("body").fadeIn();
+}
+
+/*
+      <div class="pane">
+        <h2>Open Bugs - Critical</h2>
+        <div id="placeholder" style="width:600px;height:400px"></div>
+      </div>
+*/
+var canvas;
+function plotSeries(severity, data) {
+  // each graph gets a canvas and some text around it
+  var pane = document.createElement("div");
+  pane.innerHTML = "<h2>Open Bugs - "+severity+"</h2>"
+  var canvas = document.createElement("div");
+  $(canvas).css("width", "600px");
+  $(canvas).css("height", "400px");
+  $(canvas).attr("id", severity);
+  $(pane).append(canvas);
+
+  $("#graphs").append(pane);
+
+  var plot = $.plot($("#"+severity),
+                    [ { data: data["Layout"], label: "Layout =" },
+                      { data: data["JavaScript"], label: "JS =" },
+                      { data: data["DOM"], label: "DOM =" },
+                      { data: data["GFX"], label: "GFX =" },
+                      { data: data["Frontend"], label: "Fx =" },
+                      { data: data["Networking"], label: "Necko =" },
+                      { data: data["Mail"], label: "Mail =" },
+                      { data: data["Architecture"], label: "Arch =" },
+                      { data: data["Crypto"], label: "Crypto =" },
+                      { data: data["Services"], label: "Serv =" },
+                      { data: data["Mobile"], label: "Mobile =" },
+                    ],
+                    {
+                      series: {
+                        lines: { show: true },
+                        points: { show: false }
+                      },
+                      xaxis: { mode: "time" },
+                      crosshair: { mode: "x" },
+                      grid: {
+                        hoverable: true,
+                        autoHighlight: true,
+                        clickable: true },
+                      legend: {
+                        position: "nw" }
+                    } );
+
+  var legends = $("#"+severity+" .legendLabel");
+  var lw = 0;
+  legends.each(function () {
+    // fix the widths so they don't jump around
+    $(this).css("width", $(this).width());
+  });
+  legends.width(legends.width()+20)  // room for the legend data to expand
+
+  var updateLegendTimeout = null;
+  var latestPosition = null;
+
+  function updateLegend(item) {
+    updateLegendTimeout = null;
+
+    var pos = latestPosition;
+
+    var axes = plot.getAxes();
+    if (pos.x < axes.xaxis.min || pos.x > axes.xaxis.max ||
+        pos.y < axes.yaxis.min || pos.y > axes.yaxis.max)
+      return;
+
+    var i, j, dataset = plot.getData();
+
+    for (i = 0; i < dataset.length; ++i) {
+      var series = dataset[i];
+
+      // find the nearest points, x-wise
+      /*
+      for (j = 0; j < series.data.length; ++j)
+        if (series.data[j][0] > pos.x)
+          break;
+      */
+
+      // only adjust legend when snapping to point      
+      for (j = 0; j < series.data.length; ++j)
+        if (series.data[j][0] > item.datapoint[0])
+          break;
+
+      var y, p1 = series.data[j-1], p2 = series.data[j];
+
+      if (p1)
+        y = p1[1].toFixed(0);
+      else
+        y = "?";
+
+      legends.eq(i).text(series.label.replace(/=.*/, "= " + y));
+    }
+  }
+
+  prevPoint = null;  
+
+  $("#"+severity).bind("plothover",  function (event, pos, item) {
+    latestPosition = pos;
+    thisSev = severity;
+    if (item) {
+      // show tooltip for bugs fixed
+      if (prevPoint != item.datapoint) {
+        prevPoint = item.datapoint;
+
+        $("#tooltip").remove();
+        //debug(item.series.label.match(/^[^ ]+/)+", "+item.datapoint[0]);
+        try {
+          var team = teamLabel[item.series.label.match(/^[^ ]+/)];
+          var f = fixed[thisSev][team][item.datapoint[0]];
+          var n = opened[thisSev][team][item.datapoint[0]];
+        }
+        catch (e) { var f = "?"; var n = "?"; }
+        try {
+          var d = new Date(item.datapoint[0]);
+          var date = d.toString().substring(4,15);
+        }
+        catch (e) { var date = e; }
+        showTooltip(item.pageX, item.pageY, "<small>"+date+"</small>"+"<br>fixed: <b>"+f+
+                    "</b>, new: <b>"+n+"</b>");
+      }
+
+      if (!updateLegendTimeout) 
+        updateLegendTimeout = setTimeout(updateLegend, 50, item);
+    }
+    else {
+      $("#tooltip").remove();
+      prevPoint = null;
+    }
+  });
+}
+
+$(document).ready(function () {
+  getData();
+});
+
+</script>
+
+ </body>
+</html>

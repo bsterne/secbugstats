@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[
+			import mx.charts.HitData;
+			import mx.charts.events.ChartItemEvent;
+			import mx.controls.Alert;
+
+			private function init():void {
+				getData();
+			}
+			private function getData():void {
+				dataRequestor.send();
+			}
+			public function dtFunc(hd:HitData):String {
+				var cat:String;
+				cat = LineSeries(hd.element).yField;
+				var s:String;
+				s = "<b>" + LineSeries(hd.element).displayName + "</b><br/>";
+				s += hd.item[cat] + "<br/>";
+				s += hd.item.date;
+				if ((hd.item.details) && (hd.item[cat] > 0))
+					s += "<br/>[click for details]";
+				return s;
+			}
+			private function showDetails(e:ChartItemEvent):void {
+				var hd:HitData;
+				var cat:String;
+				var date:String;
+				hd = e.hitData;
+				cat = LineSeries(hd.element).yField
+				//Alert.show(cat+"\n"+hd.item[cat]+"\n"+hd.item.date);
+				var myDate:String;
+				var dateParts:Array;
+				if ((hd.item.details) && (hd.item[cat] > 0)) {
+					dateParts = hd.item.date.split("/");
+					myDate = dateParts[2]+"-"+dateParts[0]+"-"+dateParts[1];
+					var url:URLRequest = new URLRequest("category.php?cat="+cat+"&date="+myDate);
+					navigateToURL(url, "_self")
+				}
+			}
+		]]>
+	</mx:Script>
+	
+	<mx:HTTPService id="dataRequestor" url="/secbugstats/ws-sec-response.php" useProxy="false" method="POST">
+		<mx:request xmlns="">
+		</mx:request>
+	</mx:HTTPService>
+ 
+  <!-- Define custom colors for use as fills. -->
+  <mx:Stroke id="sc1" color="0xEC4832" weight="2" />
+  <mx:Stroke id="sc2" color="0x400058" weight="2"/>
+  <mx:Stroke id="sc3" color="0xF5ED93" weight="2"/>
+    
+	<mx:Panel title="Mozilla Security Team Response" height="100%" width="100%">
+		<mx:LineChart id="chart" 
+			height="100%"
+			width="100%"
+			showDataTips="true"
+			dataTipFunction="dtFunc"
+			itemClick="showDetails(event)"
+			dataProvider="{dataRequestor.lastResult.stats.stat}">
+			<mx:horizontalAxis>
+				<mx:DateTimeAxis dataUnits="days" dataInterval="1" />
+			</mx:horizontalAxis>
+			
+			<mx:series>
+				<mx:LineSeries yField="sg_needstriage" xField="date" form="segment" displayName="Needs Triage" lineStroke="{sc1}" interpolateValues="true" />
+				<mx:LineSeries yField="sg_unconfirmed" xField="date" form="segment" displayName="Unconfirmed" lineStroke="{sc2}" interpolateValues="true" />
+				<mx:LineSeries yField="sg_untouched" xField="date" form="segment" displayName="Stale (14 days)" lineStroke="{sc3}" interpolateValues="true" />
+			</mx:series>
+		</mx:LineChart>
+		<mx:Legend dataProvider="{chart}" direction="horizontal"/>
+	</mx:Panel>
+</mx:Application>

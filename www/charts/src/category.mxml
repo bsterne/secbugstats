@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[
+			import flash.external.*;
+			import mx.charts.events.ChartItemEvent;
+			import mx.charts.HitData;
+			import mx.charts.series.items.PieSeriesItem;
+			import mx.controls.Alert;
+			import mx.managers.IBrowserManager;
+			import mx.managers.BrowserManager;
+			import mx.utils.URLUtil;
+			import mx.events.BrowserChangeEvent;			
+			public var browserManager:IBrowserManager;
+			public var hostname:String;
+			public var level:Number = 1;
+			
+			private function displayTotal(data:Object, field:String, index:Number, percentValue:Number):String {
+				var s:String;
+				s = data.product;
+				if (data.component)
+					s += " - "+data.component;
+				s += " - "+data.count;
+				return s;
+			}
+			[Bindable]
+			public var myCategory:String;
+			[Bindable]
+			public var myDate:String;
+			[Bindable]
+			public var myProduct:String;
+			public var myBuglist:String;
+			[Bindable]
+			private var cm:ContextMenu;
+			
+			private function init():void {
+				myCategory = Application.application.parameters.cat;
+				myDate = Application.application.parameters.date;
+				myProduct = Application.application.parameters.prod;
+				cm = new ContextMenu();
+				cm.hideBuiltInItems();
+				chart.contextMenu = cm;
+				var url:String = Application.application.url;
+				var p:RegExp = new RegExp("http://[^/]*/");
+				hostname = p.exec(url).toString();
+				// debug
+				
+				if (myCategory == undefined)
+					myCategory = "sg_critical";
+				if (myDate == undefined)
+					myDate = "2008-09-28";
+				if (myProduct == undefined)
+					myProduct = "";
+				
+				// we are already drilled down
+				if (myProduct != "")
+					level = 2;
+				updateTitle();
+				updateLink();
+				getData();
+			}
+			private function menuItemSelect(e:ContextMenuEvent):void {
+				goToBugzilla();
+			}
+			private function getData():void {
+				dataRequestor.send();
+			}
+			private function drillDown(e:ChartItemEvent):void {
+				if (level == 1) {
+					//Alert.show(e.hitData.item.product);
+					myProduct = e.hitData.item.product;
+					dataRequestor.send();
+					level = 2;
+				}
+				else {
+					goBackUp();
+				}
+				updateTitle();
+				updateLink();
+			}
+			private function goBackUp():void {
+				myProduct = "";
+				dataRequestor.send();
+				level = 1;
+			}
+			private function showTooltip(hd:HitData):String {
+				var openBugList:ContextMenuItem = new ContextMenuItem("Open Bug List", true);
+				openBugList.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, menuItemSelect);
+
+				var pSI:PieSeriesItem = hd.chartItem as PieSeriesItem;
+				var s:String;
+				s = "<b>"+pSI.item.product;
+				if (pSI.item.component)
+					s += " - "+pSI.item.component;
+				s += " ("+pSI.item.count+")</b><br/>"+pSI.percentValue.toFixed(1)+"%<br>";
+				if (pSI.item.total_age_days){
+					if (pSI.item.total_age_days > 0)
+						s += "Avg Age: <b>" + Math.round(pSI.item.total_age_days/pSI.item.count) + " days</b><br>";
+					else
+						s += "Avg Age: <b>unknown</b><br>";
+				}
+				else if (pSI.item.avg_age_days){
+					if (pSI.item.avg_age_days > 0)
+						s += "Avg Age: <b>" + Math.round(pSI.item.avg_age_days) + " days</b><br>";
+					else
+						s += "Avg Age: <b>unknown</b><br>";
+				}
+				if (pSI.item.med_age_days){
+					if (pSI.item.med_age_days > 0)
+						s += "Med Age: <b>" + pSI.item.med_age_days + " days</b><br>";
+					else
+						s += "Med Age: <b>unknown</b><br>";
+				}
+				if (pSI.item.bug_list) {
+					myBuglist = pSI.item.bug_list;
+					cm.customItems = [openBugList];
+				}
+				else {
+					myBuglist = "";
+					cm.customItems = [];
+				}
+				return s;
+			}
+			private function goToBugzilla():void {
+				if (myBuglist.length > 0) {
+					var url:URLRequest = new URLRequest("https://bugzilla.mozilla.org/buglist.cgi?bug_id="+myBuglist);
+					navigateToURL(url, "_blank");
+				}
+			}
+			private function displayCat(s:String):String {
+				return s.substr(3,1).toUpperCase()+s.substring(4, s.length);
+			}
+			private function updateTitle():void {
+				var catProd:String;
+				if (myProduct.length == 0)
+					catProd = displayCat(myCategory);
+				else
+					catProd = displayCat(myCategory) + " - " + myProduct;
+				panel.title = "Security Bug Distribution - " + catProd;
+				if (ExternalInterface.available) {
+					try {
+						ExternalInterface.call("updateHeader", catProd);
+					}
+					catch (e:Error) {}
+				}
+			}
+			private function updateLink():void {
+				var curLink:String;
+				curLink = hostname+"secbugstats/category.php?cat="+myCategory+"&date="+myDate; 
+				if (myProduct != "")
+					curLink += "&prod="+myProduct;
+				link.text = curLink;
+			}
+		]]>
+	</mx:Script>
+		
+	<mx:HTTPService id="dataRequestor" url="/secbugstats/ws-details-snapshot.php" useProxy="false" method="POST">
+		<mx:request xmlns="">
+			<category>{myCategory}</category>
+			<date>{myDate}</date>
+			<product>{myProduct}</product>
+		</mx:request>
+	</mx:HTTPService>
+	<!-- Define custom colors for use as fills. -->
+	<mx:SolidColor id="sc1" color="0x990000" alpha=".8"/>
+	<mx:SolidColor id="sc2" color="0xBA6427" alpha=".8"/>
+	<mx:SolidColor id="sc3" color="0xD1940C" alpha=".8"/>
+	<mx:SolidColor id="sc4" color="0x267726" alpha=".8"/>
+	<mx:SolidColor id="sc5" color="0xBAB5AB" alpha=".8"/>
+	<mx:SolidColor id="sc6" color="0x565248" alpha=".8"/>
+	<mx:SolidColor id="sc7" color="0x83A67F" alpha=".8"/>
+	<mx:SolidColor id="sc8" color="0x445632" alpha=".8"/>
+	<mx:SolidColor id="sc9" color="0x663822" alpha=".8"/>
+	<mx:SolidColor id="sc10" color="0x887FA3" alpha=".8"/>
+	<mx:SolidColor id="sc11" color="0x494066" alpha=".8"/>
+	<mx:SolidColor id="sc12" color="0x7590AE" alpha=".8"/>
+	<mx:SolidColor id="sc13" color="0x314E6C" alpha=".8"/>
+	<mx:SolidColor id="sc14" color="0xE0C39E" alpha=".8"/>
+	<mx:SolidColor id="sc15" color="0x826647" alpha=".8"/>
+	<mx:SolidColor id="sc16" color="0x000000" alpha=".8"/>
+  
+	<!-- This Stroke is used for the callout lines. -->
+	<mx:Stroke id="callouts" weight="2" color="0x999999" alpha=".8" caps="square"/>
+	  
+	<!-- This Stroke is used to separate the wedges in the pie. -->
+	<mx:Stroke id="radial" weight="1" color="0x000000" alpha=".5"/>
+	
+	<!-- This Stroke is used for the outer border of the pie. -->
+	<mx:Stroke id="pieborder" color="0x000000" weight="2" alpha=".5"/>
+
+	<mx:VBox width="100%" height="100%">
+		<mx:Panel id="panel" title="" height="100%" width="100%">
+			<mx:PieChart id="chart"
+        		height="100%"
+        		width="100%"
+        		paddingRight="5"
+        		paddingLeft="5"
+        		showDataTips="true"
+        		dataTipFunction="showTooltip"
+        		dataProvider="{dataRequestor.lastResult.details.detail}"
+        		itemClick="drillDown(event)"> 
+            	<mx:series>
+        			<mx:PieSeries 
+                    	nameField="did"
+                    	labelPosition="callout"
+                    	field="count"
+                    	labelFunction="displayTotal"
+                    	fills="{[sc1, sc2, sc3, sc4, sc5, sc6, sc7, sc8, sc9, sc10, sc11, sc12, sc13, sc14, sc15, sc16]}"
+                    	stroke="{pieborder}"
+                    	radialStroke="{radial}">
+	                	<mx:showDataEffect>	                	
+    	            		<mx:SeriesInterpolate duration="1000" elementOffset="0" />
+        	        	</mx:showDataEffect>
+            	    </mx:PieSeries>
+	            </mx:series>
+    	    </mx:PieChart>
+	    </mx:Panel>
+	    <mx:HBox>
+	    	<mx:Form>
+	    		<mx:FormItem label="Direct Link">
+	    			<mx:TextInput id="link" text="" />
+	    		</mx:FormItem>
+	    	</mx:Form>
+	    </mx:HBox>
+	</mx:VBox>	
+</mx:Application>

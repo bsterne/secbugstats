@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[
+			import mx.charts.series.ColumnSeries;
+			import mx.charts.chartClasses.Series;
+			import mx.charts.ChartItem;
+			import mx.charts.series.items.ColumnSeriesItem;
+			import mx.charts.events.ChartItemEvent;
+			import mx.charts.HitData;
+			import mx.charts.series.items.PieSeriesItem;
+			import mx.controls.Alert;
+			import mx.managers.IBrowserManager;
+			import mx.managers.BrowserManager;
+			import mx.utils.URLUtil;
+			import mx.events.BrowserChangeEvent;			
+			public var browserManager:IBrowserManager;
+			public var hostname:String;
+			
+			[Bindable]
+			public var myDate:String;
+			[Bindable]
+			public var myBuglist:String;
+			[Bindable]
+			private var cm:ContextMenu;
+
+			private function init():void {
+				myDate = Application.application.parameters.date;
+				cm = new ContextMenu();
+				cm.hideBuiltInItems();
+				chart.contextMenu = cm;
+				
+				// debug
+				
+				if (myDate == undefined)
+					myDate = "2008-10-26";
+				
+				getData();
+			}
+			private function menuItemSelect(e:ContextMenuEvent):void {
+				goToBugzilla();
+			}
+			private function getData():void {
+				dataRequestor.send();
+			}
+			private function displayCat(s:String):String {
+				return s.substr(3,1).toUpperCase()+s.substring(4, s.length);
+			}
+			private function queryCat(s:String):String {
+				if (s.match(/[0-9]{4}-[0-9]{2}-[0-9]{2}/))
+					return s;
+				var dateParts:Array = s.split("/");
+				return dateParts[2]+"-"+dateParts[0]+"-"+dateParts[1];
+			}
+			private function displayDate(s:String):String {
+				if (s.match(/[0-9]{2}\/[0-9]{2}\/[0-9]{4}/))
+					return s;
+				var dateParts:Array = s.split("-");
+				return dateParts[1]+"/"+dateParts[2]+"/"+dateParts[0];
+			}
+			private function showTooltip(hd:HitData):String {
+				var openBugList:ContextMenuItem = new ContextMenuItem("Open Bug List", true);
+				openBugList.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, menuItemSelect);
+				
+				var cSI:ColumnSeriesItem = hd.chartItem as ColumnSeriesItem;
+				var s:String = "";
+				var cat:String;
+				cat = ColumnSeries(hd.element).yField;
+				s += "<b>"+displayCat(cat)+" - "+cSI.item.group+" ("+cSI.item[cat]+")</b><br/>";
+				s += "Avg age: "+cSI.item[cat].@avg_age_days+" days<br/>";
+				s += cSI.item.group+" total: "+cSI.item.group.@total;
+				
+				if (cSI.item.bug_list) {
+					myBuglist = cSI.item[cat].@bug_list;
+					cm.customItems = [openBugList];
+				}
+				else {
+					myBuglist = "";
+					cm.customItems = [];
+				}
+				return s;
+			}
+			private function goToBugzilla():void {
+				if (myBuglist.length > 0) {
+					var url:URLRequest = new URLRequest("https://bugzilla.mozilla.org/buglist.cgi?bug_id="+myBuglist);
+					navigateToURL(url, "_blank");
+				}
+			}
+		]]>
+	</mx:Script>
+		
+	<mx:HTTPService resultFormat="e4x" id="dataRequestor" url="/secbugstats/ws-bugs-by-team.php" useProxy="false" method="POST">
+		<mx:request xmlns="">
+			<date>{myDate}</date>
+		</mx:request>
+	</mx:HTTPService>
+	<!-- Define custom colors for use as fills. -->
+	<mx:SolidColor id="sc1" color="0x990000" alpha=".8"/>
+	<mx:SolidColor id="sc2" color="0xBA6427" alpha=".8"/>
+	<mx:SolidColor id="sc3" color="0xD1940C" alpha=".8"/>
+	<mx:SolidColor id="sc4" color="0x267726" alpha=".8"/>
+	<mx:SolidColor id="sc5" color="0xBAB5AB" alpha=".8"/>
+	<mx:SolidColor id="sc6" color="0x565248" alpha=".8"/>
+	<mx:SolidColor id="sc7" color="0x83A67F" alpha=".8"/>
+	<mx:SolidColor id="sc8" color="0x445632" alpha=".8"/>
+	<mx:SolidColor id="sc9" color="0x663822" alpha=".8"/>
+	<mx:SolidColor id="sc10" color="0x887FA3" alpha=".8"/>
+	<mx:SolidColor id="sc11" color="0x494066" alpha=".8"/>
+	<mx:SolidColor id="sc12" color="0x7590AE" alpha=".8"/>
+	<mx:SolidColor id="sc13" color="0x314E6C" alpha=".8"/>
+	<mx:SolidColor id="sc14" color="0xE0C39E" alpha=".8"/>
+	<mx:SolidColor id="sc15" color="0x826647" alpha=".8"/>
+	<mx:SolidColor id="sc16" color="0x000000" alpha=".8"/>
+  
+	<!-- This Stroke is used for the outer border of the column. -->
+	<mx:Stroke id="columnborder" color="0x000000" weight="0" alpha=".5" />
+
+	<mx:VBox width="100%" height="100%">
+		<mx:Panel title="Security Bug Distribution - {displayDate(myDate)}" height="100%" width="100%">
+        	<mx:ColumnChart id="chart" 
+            	height="100%"
+            	width="100%"
+            	showDataTips="true"
+            	dataTipFunction="showTooltip"
+            	dataProvider="{dataRequestor.lastResult.stat}">
+            	<mx:horizontalAxis>
+            		<mx:CategoryAxis
+            			dataProvider="{dataRequestor.lastResult.stat}"
+            			categoryField="group"/>
+            	</mx:horizontalAxis>
+            	<mx:series>
+            		<mx:ColumnSet type="stacked">
+						<mx:series>
+							<mx:ColumnSeries
+		                    	xField="group"
+        		            	yField="sg_critical"
+        		            	displayName="Critical"
+        		            	fill="{sc1}"
+        		            	stroke="{columnborder}"
+		            	    />
+		            	    <mx:ColumnSeries
+		                    	xField="group"
+        		            	yField="sg_high"
+        		            	displayName="High"
+        		            	fill="{sc2}"
+        		            	stroke="{columnborder}"
+		            	    />
+		            	    <mx:ColumnSeries
+		                    	xField="group"
+        		            	yField="sg_moderate"
+        		            	displayName="Moderate"
+        		            	fill="{sc3}"
+        		            	stroke="{columnborder}"
+		            	    />
+		            	    <mx:ColumnSeries
+		                    	xField="group"
+        		            	yField="sg_low"
+        		            	displayName="Low"
+        		            	fill="{sc4}"
+        		            	stroke="{columnborder}"
+		            	    />
+						</mx:series>
+            	    </mx:ColumnSet>
+	            </mx:series>
+    	    </mx:ColumnChart>
+    	    <mx:Legend dataProvider="{chart}" direction="horizontal" />
+	    </mx:Panel>
+	</mx:VBox>	
+</mx:Application>

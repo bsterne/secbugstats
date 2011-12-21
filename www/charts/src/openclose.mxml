@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[
+			import mx.charts.series.items.ColumnSeriesItem;
+			import mx.graphics.IFill;
+			import mx.charts.ChartItem;
+			import mx.charts.HitData;
+			import mx.charts.events.ChartItemEvent;
+			import mx.controls.Alert;
+
+			private var monthly:Boolean = true;
+			
+			private function init():void {
+				getData();
+			}
+			private function getData():void {
+				dataRequestor.send();
+			}
+			public function myFillFunc(element:ChartItem, index:Number):IFill {
+				var item:ColumnSeriesItem = ColumnSeriesItem(element);
+				var delta:Number = Number(item.yValue);
+				if (delta >= 0)
+					return sc1;
+				else
+					return sc2;
+			}
+			public function myDateParseFunc(s:String):Date {
+				var a:Array = s.split("/");
+				var newDate:Date = new Date(a[1], a[0]-1, 1);
+				return newDate;
+			}
+			public function toggleChartTime():void {
+				if (monthly) {
+					monthly = false;
+					dataRequestor.url = "/secbugstats/ws-sec-open-close.php?time=week";
+					ls1.displayName = "Opened/Week";
+					ls2.displayName = "Closed/Week";
+					cs1.displayName = "Weekly Delta";
+					panel2.title = "Open Security Bugs - Weekly Delta";
+					getData();
+					button.label = "Monthly Changes";
+				}
+				else {
+					monthly = true;
+					dataRequestor.url = "/secbugstats/ws-sec-open-close.php";
+					ls1.displayName = "Opened/Month";
+					ls2.displayName = "Closed/Month";
+					cs1.displayName = "Monthly Delta";
+					panel2.title = "Open Security Bugs - Monthly Delta";
+					getData();
+					button.label = "Weekly Changes";
+				}
+			}
+		]]>
+	</mx:Script>
+	
+	<mx:HTTPService 
+		id="dataRequestor" 
+		url="/secbugstats/ws-sec-open-close.php" 
+		useProxy="false" 
+		method="POST">
+		<mx:request xmlns="">
+		</mx:request>
+	</mx:HTTPService>
+ 
+  <!-- Define custom colors for use as fills. -->
+  <mx:SolidColor id="sc1" color="0x73B301" alpha="1"/>
+  <mx:Stroke id="sc1a" color="0x73B301" weight="2" alpha=".75"/>
+  <mx:SolidColor id="sc2" color="0xE6CC3C" alpha="1"/>
+  <mx:Stroke id="sc2a" color="0xE6CC3C" weight="2" alpha=".75"/>
+  <!-- This Stroke is used for the outer border of the column. -->
+  <mx:Stroke id="columnborder" color="0x000000" weight="0" alpha=".5" />
+  
+	<!-- Define chart effects -->
+	<mx:SeriesSlide 
+		id="slideDown" 
+		duration="1000" 
+		direction="down"
+	/>
+	<mx:SeriesInterpolate
+		id="interpolate" 
+		duration="1000" 
+		minimumElementDuration="200"
+		elementOffset="0"
+	/>
+	<mx:SeriesSlide 
+		id="slideRight" 
+		duration="1000" 
+		direction="right"
+	/>
+  
+	<mx:VBox width="100%" height="100%">
+		<mx:Panel 
+			title="Mozilla Security Bugs - Opened/Closed" 
+			height="50%" 
+			width="100%">
+	
+			<mx:LineChart id="chart" 
+				height="100%"
+				width="100%"
+				showDataTips="true"
+				dataProvider="{dataRequestor.lastResult.stats.stat}"
+			>
+				<mx:horizontalAxis>
+
+					<mx:CategoryAxis
+						categoryField="date"
+					/>
+					<!--<mx:DateTimeAxis
+						dataUnits="months" 
+						parseFunction="myDateParseFunc"
+					/>-->
+				</mx:horizontalAxis>
+
+				<mx:series>
+
+					<mx:LineSeries
+						id="ls1"
+						yField="sg_opened"
+						displayName="Opened/Month"
+						form="segment" 
+						lineStroke="{sc1a}"
+						showDataEffect="slideRight" 
+						hideDataEffect="slideDown">
+					</mx:LineSeries>
+				
+					<mx:LineSeries
+						id="ls2" 
+						yField="sg_closed" 
+						displayName="Closed/Month"
+						form="segment" 
+						lineStroke="{sc2a}"
+						showDataEffect="slideRight" 
+						hideDataEffect="slideDown">
+					</mx:LineSeries>
+
+				</mx:series>
+			</mx:LineChart>
+
+			<mx:Legend dataProvider="{chart}" direction="horizontal"/>
+		</mx:Panel>
+		
+		<mx:Panel id="panel2"
+			title="Open Security Bugs - Monthly Delta" 
+			height="50%" 
+			width="100%">
+		
+			<mx:ColumnChart id="chart2" 
+				height="100%"
+				width="100%"
+				showDataTips="true"
+				dataProvider="{dataRequestor.lastResult.stats.stat}"
+			>
+				<mx:horizontalAxis>
+
+					<mx:CategoryAxis
+						id="a2"
+						categoryField="date"
+					/>
+				
+		 		</mx:horizontalAxis>
+
+				<mx:horizontalAxisRenderers>
+					<mx:AxisRenderer axis="{a2}" 
+						showLabels="false" 
+						showLine="false" />
+				</mx:horizontalAxisRenderers>
+	
+				<mx:series>
+
+					<mx:ColumnSeries 
+						id="cs1"
+						labelPosition="inside" 
+						yField="delta"
+						displayName="Monthly Delta"
+						fillFunction="myFillFunc"
+						stroke="{columnborder}"
+						showDataEffect="interpolate" 
+						hideDataEffect="slideDown">					
+					</mx:ColumnSeries>
+
+				</mx:series>
+			</mx:ColumnChart>
+			<mx:Legend dataProvider="{chart2}" direction="horizontal"/>
+		</mx:Panel>
+	    <mx:HBox>
+	    	<mx:Button 
+	    		id="button" 
+	    		label="Weekly Changes" 
+	    		click="toggleChartTime()" />
+	    </mx:HBox>
+	</mx:VBox>	
+</mx:Application>

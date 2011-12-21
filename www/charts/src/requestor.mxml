@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application
+	xmlns:mx="http://www.adobe.com/2006/mxml"
+	layout="absolute" backgroundColor="#ffffff" backgroundAlpha="0"
+	creationComplete="init()">
+	<mx:Script>
+		<![CDATA[
+			import mx.rpc.events.ResultEvent;
+			import mx.controls.Alert;
+			import flash.external.*;
+
+			private function init():void {
+				//Alert.show("setting url to "+Application.application.parameters.url);
+				dataRequestor.url = Application.application.parameters.url;
+				dataRequestor.send();
+			}
+			private function httpResult(event:ResultEvent):void {
+				var result:Object = event.result;
+				ExternalInterface.call("failTest");
+			}
+		]]>
+	</mx:Script>
+		
+	<mx:HTTPService id="dataRequestor" url="" useProxy="false" method="POST" resultFormat="text" result="httpResult(event)">
+		<mx:request xmlns="">
+			<data>This came from a plugin</data>
+		</mx:request>
+	</mx:HTTPService>
+</mx:Application>
